@@ -1,3 +1,5 @@
+Drag'n'drop in Elm: https://www.youtube.com/watch?v=Rzz78cR0hPw
+
 TODO:
 
 - [x] Show an image
