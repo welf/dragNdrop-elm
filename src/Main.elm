@@ -22,6 +22,11 @@ type alias Size =
 
 type Frame
     = SingleImage { url : String }
+    | HorisontalSplit
+        { top : Frame
+        , topHeight : Int
+        , bottom : Frame
+        }
 
 
 initialModel : Model
@@ -29,8 +34,14 @@ initialModel =
     { canvas =
         { width = 250, height = 250 }
     , frame =
-        SingleImage
-            { url = "http://i.imgur.com/4peKJPa.jpg"
+        HorisontalSplit
+            { top =
+                SingleImage
+                    { url = "http://i.imgur.com/4peKJPa.jpg" }
+            , topHeight = 80
+            , bottom =
+                SingleImage
+                    { url = "http://imgur.com/LFWCIHR.jpg" }
             }
     }
 
@@ -77,6 +88,20 @@ viewFrame size frame =
                     ]
                 ]
                 []
+
+        HorisontalSplit { top, topHeight, bottom } ->
+            Html.div []
+                [ viewFrame
+                    { width = size.width
+                    , height = topHeight
+                    }
+                    top
+                , viewFrame
+                    { width = size.width
+                    , height = size.height - topHeight
+                    }
+                    bottom
+                ]
 
 
 view : Model -> Html.Html Msg
