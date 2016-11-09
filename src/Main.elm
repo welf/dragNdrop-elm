@@ -25,8 +25,14 @@ type alias Size =
     }
 
 
+type alias Image =
+    { url : String
+    , size : Size
+    }
+
+
 type Frame
-    = SingleImage { url : String }
+    = SingleImage Image
     | HorisontalSplit
         { top : Frame
         , topHeight : Int
@@ -42,11 +48,15 @@ initialModel =
         HorisontalSplit
             { top =
                 SingleImage
-                    { url = "http://i.imgur.com/4peKJPa.jpg" }
+                    { url = "http://i.imgur.com/4peKJPa.jpg"
+                    , size = { width = 640, height = 426 }
+                    }
             , topHeight = 80
             , bottom =
                 SingleImage
-                    { url = "http://imgur.com/LFWCIHR.jpg" }
+                    { url = "http://imgur.com/LFWCIHR.jpg"
+                    , size = { width = 682, height = 454 }
+                    }
             }
     , dragState = Nothing
     }
@@ -143,15 +153,27 @@ viewCanvas borderSize size rootFrame =
 viewFrame : Int -> Size -> Frame -> Html.Html Msg
 viewFrame borderSize size frame =
     case frame of
-        SingleImage { url } ->
-            Html.div
-                [ Html.Attributes.style
-                    [ ( "height", toString size.height ++ "px" )
-                    , ( "background-image", "url(" ++ url ++ ")" )
-                    , ( "background-size", "auto " ++ toString size.height ++ "px" )
+        SingleImage image ->
+            let
+                imageRatio =
+                    toFloat image.size.width / toFloat image.size.height
+
+                frameRatio =
+                    toFloat size.width / toFloat size.height
+            in
+                Html.div
+                    [ Html.Attributes.style
+                        [ ( "height", toString size.height ++ "px" )
+                        , ( "background-image", "url(" ++ image.url ++ ")" )
+                        , ( "background-size"
+                          , if imageRatio > frameRatio then
+                                "auto " ++ toString size.height ++ "px"
+                            else
+                                toString size.width ++ "px auto"
+                          )
+                        ]
                     ]
-                ]
-                []
+                    []
 
         HorisontalSplit { top, topHeight, bottom } ->
             Html.div []
