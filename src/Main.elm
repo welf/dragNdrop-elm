@@ -1,13 +1,15 @@
 module Main exposing (..)
 
 import Html.App
-import Html
-import Html.Attributes
-import Html.Events
+import Html exposing (Html, div, text)
+import Html.Attributes exposing (style)
+import Html.Events exposing (on)
 import Json.Decode
 import Mouse
 
 
+-- http://i.imgur.com/4peKJPa.jpg  640x426
+-- http://imgur.com/LFWCIHR.jpg  682x454
 -- MODEL
 
 
@@ -15,7 +17,11 @@ type alias Model =
     { canvas : Size
     , borderSize : Int
     , frame : Frame
-    , dragState : Maybe Mouse.Position
+    , dragState :
+        Maybe
+            { startPosition : Mouse.Position
+            , path : FramePath
+            }
     }
 
 
@@ -25,9 +31,16 @@ type alias Size =
     }
 
 
+type alias Position =
+    { x : Int
+    , y : Int
+    }
+
+
 type alias Image =
     { url : String
-    , size : Size
+    , imageSize : Size
+    , offset : Position
     }
 
 
@@ -40,6 +53,10 @@ type Frame
         }
 
 
+type alias FramePath =
+    List Int
+
+
 initialModel : Model
 initialModel =
     { canvas = { width = 250, height = 250 }
@@ -49,13 +66,15 @@ initialModel =
             { top =
                 SingleImage
                     { url = "http://i.imgur.com/4peKJPa.jpg"
-                    , size = { width = 640, height = 426 }
+                    , imageSize = { width = 640, height = 426 }
+                    , offset = { x = 0, y = 0 }
                     }
             , topHeight = 80
             , bottom =
                 SingleImage
                     { url = "http://imgur.com/LFWCIHR.jpg"
-                    , size = { width = 682, height = 454 }
+                    , imageSize = { width = 682, height = 454 }
+                    , offset = { x = 0, y = 0 }
                     }
             }
     , dragState = Nothing
@@ -67,49 +86,89 @@ initialModel =
 
 
 type Msg
-    = DragDividerStart Mouse.Position
-    | DragDividerMove Mouse.Position
-    | DragDividerEnd Mouse.Position
+    = DragStart FramePath Mouse.Position
+    | DragMove Mouse.Position
+    | DragEnd Mouse.Position
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case Debug.log "msg" msg of
-        DragDividerStart position ->
-            ( { model | dragState = Just position }, Cmd.none )
+        DragStart path position ->
+            ( { model
+                | dragState =
+                    Just
+                        { startPosition = position
+                        , path = path
+                        }
+              }
+            , Cmd.none
+            )
 
-        DragDividerMove currentPosition ->
+        DragMove currentPosition ->
             case model.dragState of
-                Nothing ->
-                    ( model, Cmd.none )
-
-                Just startPosition ->
+                Just { startPosition, path } ->
                     ( { model
-                        | frame =
-                            applyDrag
-                                (currentPosition.y - startPosition.y)
+                        | dragState =
+                            Just
+                                { startPosition = currentPosition
+                                , path = path
+                                }
+                        , frame =
+                            applyDrag path
+                                { x = startPosition.x - currentPosition.x
+                                , y = startPosition.y - currentPosition.y
+                                }
                                 model.frame
-                        , dragState = Just currentPosition
                       }
                     , Cmd.none
                     )
 
-        DragDividerEnd _ ->
-            ( { model | dragState = Nothing }, Cmd.none )
+                Nothing ->
+                    ( model, Cmd.none )
+
+        DragEnd _ ->
+            ( { model
+                | dragState = Nothing
+              }
+            , Cmd.none
+            )
 
 
-applyDrag : Int -> Frame -> Frame
-applyDrag yChange frame =
+applyDrag : FramePath -> Position -> Frame -> Frame
+applyDrag path changePosition frame =
     case frame of
-        SingleImage _ ->
-            frame
+        SingleImage image ->
+            SingleImage
+                { image
+                    | offset =
+                        { x = image.offset.x - changePosition.x
+                        , y = image.offset.y - changePosition.y
+                        }
+                }
 
         HorisontalSplit { top, topHeight, bottom } ->
-            HorisontalSplit
-                { top = top
-                , bottom = bottom
-                , topHeight = topHeight + yChange
-                }
+            case path of
+                [] ->
+                    HorisontalSplit
+                        { top = top
+                        , bottom = bottom
+                        , topHeight = topHeight - changePosition.y
+                        }
+
+                [ 0 ] ->
+                    HorisontalSplit
+                        { top = applyDrag path changePosition top
+                        , bottom = bottom
+                        , topHeight = topHeight
+                        }
+
+                _ ->
+                    HorisontalSplit
+                        { top = top
+                        , bottom = applyDrag path changePosition bottom
+                        , topHeight = topHeight
+                        }
 
 
 
@@ -119,83 +178,91 @@ applyDrag yChange frame =
 view : Model -> Html.Html Msg
 view model =
     Html.div
-        [ Html.Attributes.style [ ( "padding", "8px" ) ]
-        ]
+        [ style [ ( "padding", "8px" ) ] ]
         [ viewCanvas model.borderSize model.canvas model.frame
         , Html.hr [] []
         , Html.text <| toString model
         ]
 
 
-viewCanvas : Int -> Size -> Frame -> Html.Html Msg
-viewCanvas borderSize size rootFrame =
-    Html.div
-        [ Html.Attributes.style
+viewCanvas : Int -> Size -> Frame -> Html Msg
+viewCanvas borderSize size frame =
+    div
+        [ style
             [ ( "width", toString size.width ++ "px" )
             , ( "height", toString size.height ++ "px" )
             , ( "border", "2px solid black" )
             ]
         ]
-        [ Html.div
-            [ Html.Attributes.style
-                [ ( "border", toString borderSize ++ "px solid " ++ borderColor )
-                ]
+        [ div
+            [ style
+                [ ( "border", toString borderSize ++ "px solid " ++ borderColor ) ]
             ]
-            [ viewFrame borderSize
+            [ viewFrame []
+                borderSize
                 { width = size.width - 2 * borderSize
                 , height = size.height - 2 * borderSize
                 }
-                rootFrame
+                frame
             ]
         ]
 
 
-viewFrame : Int -> Size -> Frame -> Html.Html Msg
-viewFrame borderSize size frame =
+viewFrame : FramePath -> Int -> Size -> Frame -> Html Msg
+viewFrame path borderSize size frame =
     case frame of
         SingleImage image ->
             let
                 imageRatio =
-                    toFloat image.size.width / toFloat image.size.height
+                    toFloat image.imageSize.width / toFloat image.imageSize.height
 
                 frameRatio =
                     toFloat size.width / toFloat size.height
             in
-                Html.div
-                    [ Html.Attributes.style
+                div
+                    [ style
                         [ ( "height", toString size.height ++ "px" )
-                        , ( "background-image", "url(" ++ image.url ++ ")" )
+                        , ( "background-image"
+                          , "url(" ++ image.url ++ ")"
+                          )
                         , ( "background-size"
-                          , if imageRatio > frameRatio then
-                                "auto " ++ toString size.height ++ "px"
-                            else
+                          , if imageRatio < frameRatio then
                                 toString size.width ++ "px auto"
+                            else
+                                "auto " ++ toString size.height ++ "px"
+                          )
+                        , ( "cursor", "move" )
+                        , ( "background-position"
+                          , toString image.offset.x ++ "px " ++ toString image.offset.y ++ "px"
                           )
                         ]
+                    , on "mousedown" (Json.Decode.map (DragStart path) Mouse.position)
                     ]
                     []
 
         HorisontalSplit { top, topHeight, bottom } ->
-            Html.div []
-                [ viewFrame borderSize
+            div
+                []
+                [ viewFrame (0 :: path)
+                    borderSize
                     { width = size.width
                     , height = topHeight
                     }
                     top
-                , Html.div
-                    [ Html.Attributes.style
+                , div
+                    [ style
                         [ ( "width", toString size.width ++ "px" )
                         , ( "height", toString borderSize ++ "px" )
                         , ( "background-color", borderColor )
                         , ( "cursor", "row-resize" )
                         ]
-                    , Html.Events.on "mousedown" (Json.Decode.map DragDividerStart Mouse.position)
+                    , on "mousedown" (Json.Decode.map (DragStart path) Mouse.position)
                     ]
                     []
-                , viewFrame borderSize
+                , viewFrame (1 :: path)
+                    borderSize
                     { width = size.width
-                    , height =
-                        size.height - topHeight - borderSize
+                    , height = size.height - topHeight - borderSize
                     }
                     bottom
                 ]
@@ -213,14 +280,14 @@ borderColor =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model.dragState of
-        Nothing ->
-            Sub.none
-
         Just _ ->
             Sub.batch
-                [ Mouse.moves DragDividerMove
-                , Mouse.ups DragDividerEnd
+                [ Mouse.moves DragMove
+                , Mouse.ups DragEnd
                 ]
+
+        Nothing ->
+            Sub.none
 
 
 
