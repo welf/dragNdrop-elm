@@ -71,10 +71,20 @@ initialModel =
                     }
             , topHeight = 80
             , bottom =
-                SingleImage
-                    { url = "http://imgur.com/LFWCIHR.jpg"
-                    , imageSize = { width = 682, height = 454 }
-                    , offset = { x = 0, y = 0 }
+                HorisontalSplit
+                    { top =
+                        SingleImage
+                            { url = "http://imgur.com/LFWCIHR.jpg"
+                            , imageSize = { width = 682, height = 454 }
+                            , offset = { x = 0, y = 0 }
+                            }
+                    , topHeight = 100
+                    , bottom =
+                        SingleImage
+                            { url = "http://i.imgur.com/4peKJPa.jpg"
+                            , imageSize = { width = 640, height = 426 }
+                            , offset = { x = 0, y = 0 }
+                            }
                     }
             }
     , dragState = Nothing
@@ -99,7 +109,7 @@ update msg model =
                 | dragState =
                     Just
                         { startPosition = position
-                        , path = path
+                        , path = List.reverse path
                         }
               }
             , Cmd.none
@@ -149,25 +159,25 @@ applyDrag path changePosition frame =
 
         HorisontalSplit { top, topHeight, bottom } ->
             case path of
-                [] ->
+                0 :: rest ->
                     HorisontalSplit
-                        { top = top
+                        { top = applyDrag rest changePosition top
                         , bottom = bottom
-                        , topHeight = topHeight - changePosition.y
+                        , topHeight = topHeight
                         }
 
-                [ 0 ] ->
+                1 :: rest ->
                     HorisontalSplit
-                        { top = applyDrag path changePosition top
-                        , bottom = bottom
+                        { top = top
+                        , bottom = applyDrag rest changePosition bottom
                         , topHeight = topHeight
                         }
 
                 _ ->
                     HorisontalSplit
                         { top = top
-                        , bottom = applyDrag path changePosition bottom
-                        , topHeight = topHeight
+                        , bottom = bottom
+                        , topHeight = topHeight - changePosition.y
                         }
 
 
